@@ -12,6 +12,13 @@ import {
 } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 
+// 【修正】將不會改變的常數移到組件外部，避免在每次渲染時重新建立，提升效能
+const categories = ['餐飲', '交通', '購物', '娛樂', '醫療', '教育', '其他'];
+const categoryColors = {
+  '餐飲': '#FF6B6B', '交通': '#4ECDC4', '購物': '#45B7D1',
+  '娛樂': '#96CEB4', '醫療': '#FFEAA7', '教育': '#DDA0DD', '其他': '#98D8C8' // 【修正】移除了 '醫療' 色碼中多餘的 's'
+};
+
 const ExpenseDiaryApp = () => {
   // --- 狀態管理 (State Management) ---
   const [activeTab, setActiveTab] = useState('expense');
@@ -21,9 +28,9 @@ const ExpenseDiaryApp = () => {
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   
   // 用戶和認證相關狀態
-  const [user, setUser] = useState(null); // 當前登入的用戶
-  const [isLoading, setIsLoading] = useState(true); // 初始載入狀態
-  const [authIsReady, setAuthIsReady] = useState(false); // Firebase 認證是否已就緒
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [authIsReady, setAuthIsReady] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   
   // UI 狀態
@@ -42,17 +49,9 @@ const ExpenseDiaryApp = () => {
     content: '',
     date: new Date().toISOString().split('T')[0]
   });
-  
-  // 靜態數據
-  const categories = ['餐飲', '交通', '購物', '娛樂', '醫療', '教育', '其他'];
-  const categoryColors = {
-    '餐飲': '#FF6B6B', '交通': '#4ECDC4', '購物': '#45B7D1',
-    '娛樂': '#96CEB4', '醫療': 's#FFEAA7', '教育': '#DDA0DD', '其他': '#98D8C8'
-  };
 
   // --- Firebase 互動函式 ---
 
-  // 載入用戶資料 (從 Firestore)
   const loadUserData = useCallback(async (currentUser) => {
     if (!currentUser) return;
     const docRef = doc(db, 'users', currentUser.uid);
@@ -64,18 +63,16 @@ const ExpenseDiaryApp = () => {
         setDiaryEntries(data.diaryEntries || []);
         setSyncStatus('synced');
       } else {
-        // 如果是新用戶，Firestore 中還沒有資料
         console.log("No such document! Initializing for new user.");
-        setSyncStatus('synced'); // 視為已同步，因為沒有東西可載入
+        setSyncStatus('synced');
       }
     } catch (err) {
       console.error("Error loading user data:", err);
       setError('讀取資料失敗，請稍後重試。');
       setSyncStatus('offline');
     }
-  }, []);
+  }, []); // 依賴為空，因為 db 是從外部引入的穩定實例
   
-  // 同步用戶資料 (到 Firestore)
   const syncUserData = useCallback(async () => {
     if (!user) return;
     setSyncStatus('syncing');
@@ -97,7 +94,6 @@ const ExpenseDiaryApp = () => {
   
   // --- 認證處理 ---
 
-  // 處理登入/註冊
   const handleAuth = async (e) => {
     e.preventDefault();
     if (!loginForm.email || !loginForm.password) {
@@ -121,21 +117,18 @@ const ExpenseDiaryApp = () => {
     }
   };
 
-  // 處理登出
   const handleLogout = () => {
     signOut(auth);
   };
 
   // --- 副作用 (useEffect Hooks) ---
 
-  // 監聽 Firebase 認證狀態變化
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
         await loadUserData(currentUser);
       } else {
-        // 清理登出後的狀態
         setExpenses([]);
         setDiaryEntries([]);
         setSyncStatus('offline');
@@ -143,22 +136,18 @@ const ExpenseDiaryApp = () => {
       setAuthIsReady(true);
       setIsLoading(false);
     });
-    // 組件卸載時取消監聽
     return () => unsub();
   }, [loadUserData]);
 
-  // 防抖同步資料 (Debounced Sync)
   useEffect(() => {
-    // 只有在認證就緒且用戶已登入的情況下才觸發同步
     if (authIsReady && user) {
       const timer = setTimeout(() => {
         syncUserData();
-      }, 1500); // 延遲 1.5 秒同步，避免頻繁寫入
+      }, 1500);
       return () => clearTimeout(timer);
     }
   }, [expenses, diaryEntries, user, authIsReady, syncUserData]);
 
-  // 自動清理錯誤訊息
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => setError(''), 5000);
@@ -168,7 +157,6 @@ const ExpenseDiaryApp = () => {
 
   // --- 核心業務邏輯 ---
 
-  // 添加記帳記錄
   const addExpense = useCallback(() => {
     if (!expenseForm.amount) {
       setError('請填寫金額');
@@ -179,15 +167,12 @@ const ExpenseDiaryApp = () => {
       setError('請輸入有效的正數金額');
       return;
     }
-
     const newExpense = {
       id: Date.now() + Math.random(),
       ...expenseForm,
       amount
     };
-    
     setExpenses(prev => [...prev, newExpense]);
-    // 【優化】重置表單時保留日期，方便連續輸入
     setExpenseForm(prevForm => ({
       ...prevForm,
       amount: '',
@@ -197,21 +182,16 @@ const ExpenseDiaryApp = () => {
     setError('');
   }, [expenseForm]);
 
-  // 添加日記記錄
   const addDiaryEntry = useCallback(() => {
     if (!diaryForm.content.trim()) {
       setError('請輸入日記內容');
       return;
     }
-
-    // 【優化】不再將支出快照存入日記，改為動態獲取
     const newEntry = {
       id: Date.now() + Math.random(),
       date: diaryForm.date,
       content: diaryForm.content
     };
-    
-    // 如果當天已有日記，則更新，否則新增
     setDiaryEntries(prev => {
       const existingEntryIndex = prev.findIndex(entry => entry.date === diaryForm.date);
       if (existingEntryIndex > -1) {
@@ -221,8 +201,6 @@ const ExpenseDiaryApp = () => {
       }
       return [...prev, newEntry];
     });
-
-    // 【優化】重置表單時保留日期
     setDiaryForm(prevForm => ({
       ...prevForm,
       content: ''
@@ -245,15 +223,15 @@ const ExpenseDiaryApp = () => {
       value: amount,
       color: categoryColors[category]
     }));
-  }, [expenses, selectedMonth]);
+  }, [expenses, selectedMonth]); // 【修正】移除 categoryColors，因為它已經在組件外部，不會改變
 
   const totalExpense = useMemo(() => pieData.reduce((sum, item) => sum + item.value, 0), [pieData]);
   const formatMonth = useCallback((yearMonth) => `${yearMonth.slice(0,4)}年${yearMonth.slice(5,7)}月`, []);
 
   // --- 渲染 (Rendering) ---
 
-  // 登入頁面
-  if (!authIsReady || isLoading && !user) {
+  // 【修正】為載入邏輯加上括號，避免運算子混用
+  if (!authIsReady || (isLoading && !user)) {
     return <div className="flex justify-center items-center h-screen">載入中...</div>;
   }
   
@@ -298,7 +276,6 @@ const ExpenseDiaryApp = () => {
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-purple-50 min-h-screen">
       <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-        {/* 頭部 */}
         <header className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-2">
@@ -324,27 +301,135 @@ const ExpenseDiaryApp = () => {
           </div>
         </header>
 
-        {/* 標籤頁導航 */}
         <nav className="flex border-b bg-gray-50">
-            {/* ... 導航按鈕 ... (此處省略以節省篇幅，內容與原版相同) */}
+          <button onClick={() => setActiveTab('expense')} className={`flex-1 py-4 px-6 flex items-center justify-center gap-2 font-medium transition-colors ${activeTab === 'expense' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}>
+            <PlusCircle className="w-5 h-5" />記帳
+          </button>
+          <button onClick={() => setActiveTab('chart')} className={`flex-1 py-4 px-6 flex items-center justify-center gap-2 font-medium transition-colors ${activeTab === 'chart' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}>
+            <TrendingUp className="w-5 h-5" />圖表分析
+          </button>
+          <button onClick={() => setActiveTab('diary')} className={`flex-1 py-4 px-6 flex items-center justify-center gap-2 font-medium transition-colors ${activeTab === 'diary' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}>
+            <BookOpen className="w-5 h-5" />日記
+          </button>
         </nav>
 
         <main className="p-6">
-          {/* ... 各個標籤頁的內容 ... (此處省略，但已包含動態日記支出的修改) */}
-          {/* 日記頁面 */}
-          {activeTab === 'diary' && (
+          {activeTab === 'expense' && (
             <div className="space-y-6">
-              {/* 寫日記表單 */}
-              <div className="bg-green-50 rounded-lg p-6">
-                {/* ... 表單內容 ... */}
+              <div className="bg-blue-50 rounded-lg p-6">
+                <h2 className="text-xl font-semibold mb-4 text-blue-800">新增支出</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">金額</label>
+                    <input type="number" value={expenseForm.amount} onChange={(e) => setExpenseForm({...expenseForm, amount: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="請輸入金額" min="0" step="0.01"/>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">類別</label>
+                    <select value={expenseForm.category} onChange={(e) => setExpenseForm({...expenseForm, category: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      {categories.map(cat => (<option key={cat} value={cat}>{cat}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">日期</label>
+                    <input type="date" value={expenseForm.date} onChange={(e) => setExpenseForm({...expenseForm, date: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">備註</label>
+                    <input type="text" value={expenseForm.description} onChange={(e) => setExpenseForm({...expenseForm, description: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="備註說明"/>
+                  </div>
+                </div>
+                <button onClick={addExpense} className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition-colors">新增支出</button>
               </div>
 
-              {/* 日記瀏覽 */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <h3 className="text-lg font-semibold mb-4 text-gray-800">近期支出</h3>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {expenses.length === 0 ? (<p className="text-gray-500 text-center py-4">還沒有支出記錄</p>) : (
+                    expenses.slice(-5).reverse().map(expense => (
+                      <div key={expense.id} className="flex justify-between items-center bg-white p-3 rounded border">
+                        <div>
+                          <span className="font-medium">{expense.category}</span>
+                          {expense.description && <span className="text-gray-500 ml-2">{expense.description}</span>}
+                        </div>
+                        <div className="text-right">
+                          <div className="font-semibold text-red-600">-NT$ {expense.amount.toLocaleString()}</div>
+                          <div className="text-sm text-gray-500">{expense.date}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'chart' && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">月度支出分析</h2>
+                <div className="flex items-center justify-center gap-4 mb-4">
+                  <label className="text-sm font-medium text-gray-700">選擇月份：</label>
+                  <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+                </div>
+                <p className="text-gray-600">{formatMonth(selectedMonth)} 總支出：NT$ {totalExpense.toLocaleString()}</p>
+              </div>
+              
+              {pieData.length > 0 ? (
+                <div className="bg-white rounded-lg p-6 shadow-sm">
+                  <ResponsiveContainer width="100%" height={400}>
+                    <PieChart>
+                      <Pie data={pieData} cx="50%" cy="50%" labelLine={false} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} outerRadius={120} fill="#8884d8" dataKey="value">
+                        {pieData.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.color} />))}
+                      </Pie>
+                      <Tooltip formatter={(value) => `NT$ ${value.toLocaleString()}`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  
+                  <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {pieData.map((item, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: item.color }}></div>
+                          <span className="font-medium">{item.name}</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-semibold">NT$ {item.value.toLocaleString()}</div>
+                          <div className="text-sm text-gray-500">{((item.value / totalExpense) * 100).toFixed(1)}%</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  <TrendingUp className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                  <p>{formatMonth(selectedMonth)} 還沒有支出記錄</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'diary' && (
+            <div className="space-y-6">
+              <div className="bg-green-50 rounded-lg p-6">
+                <h2 className="text-xl font-semibold mb-4 text-green-800">寫日記</h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">日期</label>
+                    <input type="date" value={diaryForm.date} onChange={(e) => setDiaryForm({...diaryForm, date: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"/>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">日記內容</label>
+                    <textarea value={diaryForm.content} onChange={(e) => setDiaryForm({...diaryForm, content: e.target.value})} rows={4} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="記錄今天的心情和想法..."/>
+                  </div>
+                  <button onClick={addDiaryEntry} className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 transition-colors">保存日記</button>
+                </div>
+              </div>
+
               <div className="bg-gray-50 rounded-lg p-6">
                 <h3 className="text-lg font-semibold mb-4 text-gray-800">選擇日期查看</h3>
                 <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-md mb-4"/>
                 
-                {/* 【優化】動態顯示日記與當日支出 */}
                 {(() => {
                   const diary = getDayDiary(selectedDate);
                   const dailyExpenses = getDayExpenses(selectedDate);
