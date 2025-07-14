@@ -58,10 +58,8 @@ const ExpenseDiaryApp = () => {
   const [editingExpense, setEditingExpense] = useState(null);
   const [editingDiaryId, setEditingDiaryId] = useState(null);
   const [editingDiaryContent, setEditingDiaryContent] = useState('');
-  // 【新增】習慣編輯狀態
   const [editingHabitId, setEditingHabitId] = useState(null);
   const [editingHabitName, setEditingHabitName] = useState('');
-
 
   // 習慣追蹤的日期導覽狀態
   const [habitViewDate, setHabitViewDate] = useState(new Date());
@@ -232,7 +230,6 @@ const ExpenseDiaryApp = () => {
     });
   };
 
-  // 【新增】修改與刪除習慣的函式
   const updateHabit = async () => {
     if (!editingHabitId || !editingHabitName.trim()) return;
     const docRef = doc(db, 'users', user.uid, 'habits', editingHabitId);
@@ -250,14 +247,23 @@ const ExpenseDiaryApp = () => {
 
 
   // --- 資料計算與格式化 ---
-  // 【新增】計算記帳頁面當日支出的 useMemo
   const expensesForSelectedDate = useMemo(() => {
     return (expenses || []).filter(e => e.date === expenseForm.date);
   }, [expenses, expenseForm.date]);
 
+  // 【修正】增加了防禦性檢查，確保 e.date, e.description, e.category 存在
   const filteredAndSortedExpenses = useMemo(() => {
     return (expenses || [])
-      .filter(e => e.date.startsWith(selectedMonth) && (e.description.toLowerCase().includes(searchTerm.toLowerCase()) || e.category.includes(searchTerm)))
+      .filter(e => {
+        const descriptionMatch = e.description ? e.description.toLowerCase().includes(searchTerm.toLowerCase()) : false;
+        const categoryMatch = e.category ? e.category.includes(searchTerm) : false;
+        const dateMatch = e.date ? e.date.startsWith(selectedMonth) : false;
+        
+        if (!searchTerm) {
+          return dateMatch;
+        }
+        return dateMatch && (descriptionMatch || categoryMatch);
+      })
       .sort((a, b) => {
         switch (sortOrder) {
           case 'date-desc': return new Date(b.date) - new Date(a.date);
@@ -271,7 +277,10 @@ const ExpenseDiaryApp = () => {
 
   const pieData = useMemo(() => {
     const categoryTotals = (filteredAndSortedExpenses || []).reduce((acc, expense) => {
-      acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
+      // 防禦性檢查，確保 expense.category 存在
+      if (expense.category) {
+        acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
+      }
       return acc;
     }, {});
     return Object.entries(categoryTotals).map(([category, amount]) => ({
@@ -288,7 +297,7 @@ const ExpenseDiaryApp = () => {
   
   if (!user) {
     return (
-      <div className="max-w-md mx-auto mt-20 p-6 bg-white rounded-2xl shadow-xl">
+      <div className="max-w-md mx-auto mt-10 sm:mt-20 p-6 bg-white rounded-2xl shadow-xl">
         <div className="text-center mb-6">
           <Cloud className="w-16 h-16 mx-auto mb-4 text-blue-500" />
           <h1 className="text-2xl font-bold text-gray-800">記帳日記本 v3</h1>
@@ -357,9 +366,9 @@ const ExpenseDiaryApp = () => {
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto p-4 bg-gray-50 min-h-screen">
+      <div className="max-w-7xl mx-auto p-2 sm:p-4 bg-gray-50 min-h-screen">
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-          <header className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6">
+          <header className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 sm:p-6">
              <div className="flex items-center justify-between flex-wrap gap-4">
                <div className="flex items-center gap-3">
                  <DollarSign className="w-8 h-8" />
@@ -379,17 +388,17 @@ const ExpenseDiaryApp = () => {
            </header>
 
           <nav className="flex border-b bg-gray-100">
-            <button onClick={() => setActiveTab('expense')} className={`flex-1 py-3 px-2 text-sm sm:py-4 sm:px-6 flex items-center justify-center gap-2 font-medium transition-colors ${activeTab === 'expense' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}><PlusCircle className="w-5 h-5" />記帳</button>
-            <button onClick={() => setActiveTab('chart')} className={`flex-1 py-3 px-2 text-sm sm:py-4 sm:px-6 flex items-center justify-center gap-2 font-medium transition-colors ${activeTab === 'chart' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}><TrendingUp className="w-5 h-5" />分析</button>
-            <button onClick={() => setActiveTab('diary')} className={`flex-1 py-3 px-2 text-sm sm:py-4 sm:px-6 flex items-center justify-center gap-2 font-medium transition-colors ${activeTab === 'diary' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}><BookOpen className="w-5 h-5" />日記</button>
-            <button onClick={() => setActiveTab('todo')} className={`flex-1 py-3 px-2 text-sm sm:py-4 sm:px-6 flex items-center justify-center gap-2 font-medium transition-colors ${activeTab === 'todo' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}><ListChecks className="w-5 h-5" />待辦</button>
-            <button onClick={() => setActiveTab('habit')} className={`flex-1 py-3 px-2 text-sm sm:py-4 sm:px-6 flex items-center justify-center gap-2 font-medium transition-colors ${activeTab === 'habit' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}><CheckSquare className="w-5 h-5" />習慣</button>
+            <button onClick={() => setActiveTab('expense')} className={`flex-1 py-3 px-2 flex flex-col sm:flex-row items-center justify-center gap-2 font-medium transition-colors ${activeTab === 'expense' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}><PlusCircle className="w-5 h-5" /><span className="text-xs sm:text-sm">記帳</span></button>
+            <button onClick={() => setActiveTab('chart')} className={`flex-1 py-3 px-2 flex flex-col sm:flex-row items-center justify-center gap-2 font-medium transition-colors ${activeTab === 'chart' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}><TrendingUp className="w-5 h-5" /><span className="text-xs sm:text-sm">分析</span></button>
+            <button onClick={() => setActiveTab('diary')} className={`flex-1 py-3 px-2 flex flex-col sm:flex-row items-center justify-center gap-2 font-medium transition-colors ${activeTab === 'diary' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}><BookOpen className="w-5 h-5" /><span className="text-xs sm:text-sm">日記</span></button>
+            <button onClick={() => setActiveTab('todo')} className={`flex-1 py-3 px-2 flex flex-col sm:flex-row items-center justify-center gap-2 font-medium transition-colors ${activeTab === 'todo' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}><ListChecks className="w-5 h-5" /><span className="text-xs sm:text-sm">待辦</span></button>
+            <button onClick={() => setActiveTab('habit')} className={`flex-1 py-3 px-2 flex flex-col sm:flex-row items-center justify-center gap-2 font-medium transition-colors ${activeTab === 'habit' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}><CheckSquare className="w-5 h-5" /><span className="text-xs sm:text-sm">習慣</span></button>
           </nav>
 
-          <main className="p-6">
+          <main className="p-4 sm:p-6">
             {activeTab === 'expense' && (
                <div className="space-y-6 max-w-2xl mx-auto">
-                  <div className="bg-blue-50 rounded-lg p-6">
+                  <div className="bg-blue-50 rounded-lg p-4 sm:p-6">
                     <h2 className="text-xl font-semibold mb-4 text-blue-800">新增支出</h2>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                        <div>
@@ -402,19 +411,18 @@ const ExpenseDiaryApp = () => {
                            {categories.map(cat => (<option key={cat} value={cat}>{cat}</option>))}
                          </select>
                        </div>
-                       <div>
+                       <div className="md:col-span-2">
                          <label className="block text-sm font-medium text-gray-700 mb-2">日期</label>
                          <input type="date" value={expenseForm.date} onChange={(e) => setExpenseForm({...expenseForm, date: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-md"/>
                        </div>
-                       <div>
+                       <div className="md:col-span-2">
                          <label className="block text-sm font-medium text-gray-700 mb-2">備註</label>
                          <input type="text" value={expenseForm.description} onChange={(e) => setExpenseForm({...expenseForm, description: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="備註說明"/>
                        </div>
                      </div>
                      <button onClick={addExpense} className="mt-4 w-full bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700">新增支出</button>
                   </div>
-                  {/* 【新增】本日支出列表 */}
-                  <div className="bg-gray-50 rounded-lg p-6">
+                  <div className="bg-gray-50 rounded-lg p-4 sm:p-6">
                     <h3 className="text-lg font-semibold mb-4 text-gray-800">{expenseForm.date} 的支出明細</h3>
                     <div className="space-y-2 max-h-60 overflow-y-auto">
                       {(expensesForSelectedDate.length > 0) ? (
@@ -460,7 +468,7 @@ const ExpenseDiaryApp = () => {
 
                 <div className="lg:col-span-3">
                   <h2 className="text-2xl font-bold text-gray-800 mb-4">消費明細</h2>
-                  <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                  <div className="flex flex-col sm:flex-row gap-2 mb-4">
                     <div className="relative flex-grow">
                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                        <input type="text" placeholder="搜尋備註或類別..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg"/>
@@ -581,13 +589,13 @@ const ExpenseDiaryApp = () => {
                       <button onClick={() => setHabitViewDate(d => new Date(d.setDate(d.getDate() + 7)))} className="p-2 rounded-full hover:bg-gray-200"><ChevronRight/></button>
                    </div>
                 </div>
-                <div className="bg-purple-50 rounded-lg p-6">
+                <div className="bg-purple-50 rounded-lg p-4 sm:p-6">
                   <form onSubmit={addHabit} className="flex gap-4 mb-6 max-w-xl mx-auto">
                     <input type="text" placeholder="新增要養成的習慣..." value={habitForm.name} onChange={e => setHabitForm({name: e.target.value})} className="flex-grow border rounded-lg px-4 py-2"/>
                     <button type="submit" className="bg-purple-500 text-white px-6 py-2 rounded-lg font-semibold">新增</button>
                   </form>
                   <div className="overflow-x-auto mt-6">
-                      <table className="w-full text-center border-collapse">
+                      <table className="w-full min-w-[500px] text-center border-collapse">
                           <thead>
                               <tr className="border-b-2">
                                   <th className="py-2 px-2 font-semibold text-left">習慣</th>
