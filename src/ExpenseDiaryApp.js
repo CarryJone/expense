@@ -304,17 +304,43 @@ const ExpenseDiaryApp = () => {
   }, [expenses, expenseForm.date]);
 
   // 【修正】增加了防禦性檢查，確保 e.date, e.description, e.category 存在
+  // const filteredAndSortedExpenses = useMemo(() => {
+  //   return (expenses || [])
+  //     .filter(e => {
+  //       const descriptionMatch = e.description ? e.description.toLowerCase().includes(searchTerm.toLowerCase()) : false;
+  //       const categoryMatch = e.category ? e.category.includes(searchTerm) : false;
+  //       const dateMatch = e.date ? e.date.startsWith(selectedMonth) : false;
+  //       
+  //       if (!searchTerm) {
+  //         return dateMatch;
+  //       }
+  //       return dateMatch && (descriptionMatch || categoryMatch);
+  //     })
+  //     .sort((a, b) => {
+  //       switch (sortOrder) {
+  //         case 'date-desc': return new Date(b.date) - new Date(a.date);
+  //         case 'date-asc': return new Date(a.date) - new Date(b.date);
+  //         case 'amount-desc': return b.amount - a.amount;
+  //         case 'amount-asc': return a.amount - b.amount;
+  //         default: return 0;
+  //       }
+  //     });
+  // }, [expenses, selectedMonth, searchTerm, sortOrder]);
+
+  // 將篩選條件合併到 filteredAndSortedExpenses
   const filteredAndSortedExpenses = useMemo(() => {
     return (expenses || [])
       .filter(e => {
         const descriptionMatch = e.description ? e.description.toLowerCase().includes(searchTerm.toLowerCase()) : false;
         const categoryMatch = e.category ? e.category.includes(searchTerm) : false;
         const dateMatch = e.date ? e.date.startsWith(selectedMonth) : false;
-        
+        const matchCategory = expenseCategoryFilter === '全部' || e.category === expenseCategoryFilter;
+        const matchStart = expenseDateStart ? e.date >= expenseDateStart : true;
+        const matchEnd = expenseDateEnd ? e.date <= expenseDateEnd : true;
         if (!searchTerm) {
-          return dateMatch;
+          return dateMatch && matchCategory && matchStart && matchEnd;
         }
-        return dateMatch && (descriptionMatch || categoryMatch);
+        return dateMatch && (descriptionMatch || categoryMatch) && matchCategory && matchStart && matchEnd;
       })
       .sort((a, b) => {
         switch (sortOrder) {
@@ -325,7 +351,7 @@ const ExpenseDiaryApp = () => {
           default: return 0;
         }
       });
-  }, [expenses, selectedMonth, searchTerm, sortOrder]);
+  }, [expenses, selectedMonth, searchTerm, sortOrder, expenseCategoryFilter, expenseDateStart, expenseDateEnd]);
 
   const pieData = useMemo(() => {
     const categoryTotals = (filteredAndSortedExpenses || []).reduce((acc, expense) => {
@@ -343,42 +369,42 @@ const ExpenseDiaryApp = () => {
   const totalExpense = useMemo(() => (pieData || []).reduce((sum, item) => sum + item.value, 0), [pieData]);
 
   // 分析頁面資料過濾
-  const filteredExpenses = useMemo(() => {
-    return (expenses || [])
-      .filter(e => {
-        const matchCategory = expenseCategoryFilter === '全部' || e.category === expenseCategoryFilter;
-        const matchStart = expenseDateStart ? e.date >= expenseDateStart : true;
-        const matchEnd = expenseDateEnd ? e.date <= expenseDateEnd : true;
-        return matchCategory && matchStart && matchEnd;
-      });
-  }, [expenses, expenseCategoryFilter, expenseDateStart, expenseDateEnd]);
+  // const filteredExpenses = useMemo(() => {
+  //   return (expenses || [])
+  //     .filter(e => {
+  //       const matchCategory = expenseCategoryFilter === '全部' || e.category === expenseCategoryFilter;
+  //       const matchStart = expenseDateStart ? e.date >= expenseDateStart : true;
+  //       const matchEnd = expenseDateEnd ? e.date <= expenseDateEnd : true;
+  //       return matchCategory && matchStart && matchEnd;
+  //     });
+  // }, [expenses, expenseCategoryFilter, expenseDateStart, expenseDateEnd]);
 
   // 分頁資料
   const pagedExpenses = useMemo(() => {
     const startIdx = (expensePage - 1) * expensesPerPage;
-    return filteredExpenses.slice(startIdx, startIdx + expensesPerPage);
-  }, [filteredExpenses, expensePage]);
-  const totalExpensePages = Math.ceil(filteredExpenses.length / expensesPerPage);
+    return filteredAndSortedExpenses.slice(startIdx, startIdx + expensesPerPage);
+  }, [filteredAndSortedExpenses, expensePage]);
+  const totalExpensePages = Math.ceil(filteredAndSortedExpenses.length / expensesPerPage);
 
   // 統計摘要
   const dailyTotals = useMemo(() => {
     const map = {};
-    filteredExpenses.forEach(e => {
+    filteredAndSortedExpenses.forEach(e => {
       if (!map[e.date]) map[e.date] = 0;
       map[e.date] += e.amount;
     });
     return Object.entries(map).map(([date, amount]) => ({ date, amount }));
-  }, [filteredExpenses]);
+  }, [filteredAndSortedExpenses]);
   const maxDay = dailyTotals.reduce((max, cur) => cur.amount > max.amount ? cur : max, { amount: 0, date: '' });
-  const avgPerDay = dailyTotals.length ? (filteredExpenses.reduce((sum, e) => sum + e.amount, 0) / dailyTotals.length) : 0;
+  const avgPerDay = dailyTotals.length ? (filteredAndSortedExpenses.reduce((sum, e) => sum + e.amount, 0) / dailyTotals.length) : 0;
   const categoryRank = useMemo(() => {
     const map = {};
-    filteredExpenses.forEach(e => {
+    filteredAndSortedExpenses.forEach(e => {
       if (!map[e.category]) map[e.category] = 0;
       map[e.category] += e.amount;
     });
     return Object.entries(map).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
-  }, [filteredExpenses]);
+  }, [filteredAndSortedExpenses]);
 
   // 日記搜尋與篩選後的資料
   const filteredDiaryEntries = useMemo(() => {
@@ -618,7 +644,7 @@ const ExpenseDiaryApp = () => {
                         </LineChart>
                       )}
                     </ResponsiveContainer>
-                    <p className="text-center font-semibold text-lg mt-2">總支出: NT$ {filteredExpenses.reduce((sum, e) => sum + e.amount, 0).toLocaleString()}</p>
+                    <p className="text-center font-semibold text-lg mt-2">總支出: NT$ {filteredAndSortedExpenses.reduce((sum, e) => sum + e.amount, 0).toLocaleString()}</p>
                   </div>
                   {/* 統計摘要 */}
                   <div className="mt-4 bg-gray-50 rounded-lg p-4 text-sm space-y-2">
