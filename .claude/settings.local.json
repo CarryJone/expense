@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx prettier:*)",
+      "Bash(npx eslint:*)",
+      "Bash(true)",
+      "Bash(sed:*)"
+    ],
+    "deny": []
+  }
+}
