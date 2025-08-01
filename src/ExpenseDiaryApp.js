@@ -37,7 +37,6 @@ const ExpenseDiaryApp = () => {
   // --- 狀態管理 ---
   const [activeTab, setActiveTab] = useState('expense');
   const [calendarDate, setCalendarDate] = useState(new Date());
-  const [selectedCalendarDay, setSelectedCalendarDay] = useState(null);
   const [expenses, setExpenses] = useState([]);
   const [diaryEntries, setDiaryEntries] = useState([]);
   const [todos, setTodos] = useState([]);
@@ -93,19 +92,25 @@ const ExpenseDiaryApp = () => {
   const [expensePage, setExpensePage] = useState(1);
   const expensesPerPage = 10;
 
-  // 習慣頁面：計算每月完成率（只宣告一次）
-  const getMonthDays = (year, month) => new Date(year, month, 0).getDate();
-  const today = new Date();
-  const thisMonthStr = today.toISOString().slice(0, 7);
-  const thisMonthDays = getMonthDays(today.getFullYear(), today.getMonth() + 1);
-  const getHabitMonthStats = (habit) => {
-    const completed = (habit.completedDates || []).filter(d => d.startsWith(thisMonthStr)).length;
+  // 日曆詳情側邊欄狀態
+  const [isDetailViewOpen, setIsDetailViewOpen] = useState(false);
+  const [selectedDateForDetail, setSelectedDateForDetail] = useState(null);
+
+  // 習慣頁面：計算每月完成率
+  const getHabitMonthStats = useCallback((habit, viewDate) => {
+    const targetMonthStr = viewDate.toISOString().slice(0, 7);
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    const completed = (habit.completedDates || []).filter(d => d.startsWith(targetMonthStr)).length;
+    
     return {
       completed,
-      total: thisMonthDays,
-      percent: thisMonthDays ? Math.round((completed / thisMonthDays) * 100) : 0
+      total: daysInMonth,
+      percent: daysInMonth > 0 ? Math.round((completed / daysInMonth) * 100) : 0
     };
-  };
+  }, []);
 
   // 整合每日狀態
   const getDayStatus = (dateStr) => {
@@ -187,6 +192,17 @@ const ExpenseDiaryApp = () => {
 
   const handleLogout = () => {
     signOut(auth);
+  };
+
+  // --- UI 操作 ---
+  const handleNavigateAndSetDate = (tab, date) => {
+    setActiveTab(tab);
+    if (tab === 'expense') {
+      setExpenseForm(prev => ({ ...prev, date }));
+    } else if (tab === 'diary') {
+      setDiaryForm(prev => ({ ...prev, date }));
+    }
+    setIsDetailViewOpen(false);
   };
 
   // --- CRUD 操作 (Create, Read, Update, Delete) ---
@@ -303,31 +319,6 @@ const ExpenseDiaryApp = () => {
     return (expenses || []).filter(e => e.date === expenseForm.date);
   }, [expenses, expenseForm.date]);
 
-  // 【修正】增加了防禦性檢查，確保 e.date, e.description, e.category 存在
-  // const filteredAndSortedExpenses = useMemo(() => {
-  //   return (expenses || [])
-  //     .filter(e => {
-  //       const descriptionMatch = e.description ? e.description.toLowerCase().includes(searchTerm.toLowerCase()) : false;
-  //       const categoryMatch = e.category ? e.category.includes(searchTerm) : false;
-  //       const dateMatch = e.date ? e.date.startsWith(selectedMonth) : false;
-  //       
-  //       if (!searchTerm) {
-  //         return dateMatch;
-  //       }
-  //       return dateMatch && (descriptionMatch || categoryMatch);
-  //     })
-  //     .sort((a, b) => {
-  //       switch (sortOrder) {
-  //         case 'date-desc': return new Date(b.date) - new Date(a.date);
-  //         case 'date-asc': return new Date(a.date) - new Date(b.date);
-  //         case 'amount-desc': return b.amount - a.amount;
-  //         case 'amount-asc': return a.amount - b.amount;
-  //         default: return 0;
-  //       }
-  //     });
-  // }, [expenses, selectedMonth, searchTerm, sortOrder]);
-
-  // 將篩選條件合併到 filteredAndSortedExpenses
   const filteredAndSortedExpenses = useMemo(() => {
     return (expenses || [])
       .filter(e => {
@@ -355,7 +346,6 @@ const ExpenseDiaryApp = () => {
 
   const pieData = useMemo(() => {
     const categoryTotals = (filteredAndSortedExpenses || []).reduce((acc, expense) => {
-      // 防禦性檢查，確保 expense.category 存在
       if (expense.category) {
         acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
       }
@@ -368,25 +358,12 @@ const ExpenseDiaryApp = () => {
   
   const totalExpense = useMemo(() => (pieData || []).reduce((sum, item) => sum + item.value, 0), [pieData]);
 
-  // 分析頁面資料過濾
-  // const filteredExpenses = useMemo(() => {
-  //   return (expenses || [])
-  //     .filter(e => {
-  //       const matchCategory = expenseCategoryFilter === '全部' || e.category === expenseCategoryFilter;
-  //       const matchStart = expenseDateStart ? e.date >= expenseDateStart : true;
-  //       const matchEnd = expenseDateEnd ? e.date <= expenseDateEnd : true;
-  //       return matchCategory && matchStart && matchEnd;
-  //     });
-  // }, [expenses, expenseCategoryFilter, expenseDateStart, expenseDateEnd]);
-
-  // 分頁資料
   const pagedExpenses = useMemo(() => {
     const startIdx = (expensePage - 1) * expensesPerPage;
     return filteredAndSortedExpenses.slice(startIdx, startIdx + expensesPerPage);
   }, [filteredAndSortedExpenses, expensePage]);
   const totalExpensePages = Math.ceil(filteredAndSortedExpenses.length / expensesPerPage);
 
-  // 統計摘要
   const dailyTotals = useMemo(() => {
     const map = {};
     filteredAndSortedExpenses.forEach(e => {
@@ -406,7 +383,6 @@ const ExpenseDiaryApp = () => {
     return Object.entries(map).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
   }, [filteredAndSortedExpenses]);
 
-  // 日記搜尋與篩選後的資料
   const filteredDiaryEntries = useMemo(() => {
     return (diaryEntries || [])
       .filter(entry => {
@@ -423,7 +399,8 @@ const ExpenseDiaryApp = () => {
       });
   }, [diaryEntries, diarySearch, diaryDateMode, diaryDateValue]);
 
-  // 日記統計
+  const today = new Date();
+  const thisMonthStr = today.toISOString().slice(0, 7);
   const thisWeekStart = new Date(today);
   thisWeekStart.setDate(today.getDate() - today.getDay());
   const thisWeekEnd = new Date(today);
@@ -435,13 +412,34 @@ const ExpenseDiaryApp = () => {
     return d >= thisWeekStart && d <= thisWeekEnd;
   }).length;
 
-  // 隨機回顧日記
   const handleRandomDiary = () => {
     if (!diaryEntries || diaryEntries.length === 0) return;
     const idx = Math.floor(Math.random() * diaryEntries.length);
     setRandomDiary(diaryEntries[idx]);
     setShowRandomDiary(true);
   };
+
+  const detailsForSelectedDate = useMemo(() => {
+    if (!selectedDateForDetail) return null;
+
+    const dateStr = selectedDateForDetail.toISOString().split('T')[0];
+
+    const dailyExpenses = expenses.filter(e => e.date === dateStr);
+    const dailyDiary = diaryEntries.find(e => e.date === dateStr);
+    const dailyTodos = todos.filter(t => t.createdAt && new Date(t.createdAt.seconds * 1000).toISOString().split('T')[0] === dateStr);
+    const dailyHabits = habits.map(h => ({
+      ...h,
+      isCompleted: h.completedDates.includes(dateStr)
+    }));
+
+    return {
+      date: dateStr,
+      expenses: dailyExpenses,
+      diary: dailyDiary,
+      todos: dailyTodos,
+      habits: dailyHabits,
+    };
+  }, [selectedDateForDetail, expenses, diaryEntries, todos, habits]);
 
   // --- 渲染 (Rendering) ---
   if (!authIsReady) {
@@ -514,6 +512,83 @@ const ExpenseDiaryApp = () => {
             <div className="flex justify-end gap-4 mt-6">
               <button onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">取消</button>
               <button onClick={updateExpense} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">儲存變更</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Daily Detail Sidebar */}
+      {isDetailViewOpen && detailsForSelectedDate && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={() => setIsDetailViewOpen(false)}>
+          <div className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform translate-x-0 p-6 overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">{detailsForSelectedDate.date}</h2>
+              <button onClick={() => setIsDetailViewOpen(false)} className="p-2 rounded-full hover:bg-gray-200">
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              {/* Quick Actions */}
+              <div className="flex gap-2">
+                <button onClick={() => handleNavigateAndSetDate('expense', detailsForSelectedDate.date)} className="flex-1 bg-blue-100 text-blue-800 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-200">新增此日支出</button>
+                <button onClick={() => handleNavigateAndSetDate('diary', detailsForSelectedDate.date)} className="flex-1 bg-green-100 text-green-800 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-200">寫這天日記</button>
+              </div>
+
+              {/* Expenses Section */}
+              <div>
+                <h3 className="font-semibold text-lg mb-2 text-red-600">支出明細</h3>
+                <div className="space-y-2">
+                  {detailsForSelectedDate.expenses.length > 0 ? (
+                    detailsForSelectedDate.expenses.map(exp => (
+                      <div key={exp.id} className="bg-gray-50 p-3 rounded-md flex justify-between">
+                        <span>{exp.category}: {exp.description || 'N/A'}</span>
+                        <span className="font-medium">-NT$ {exp.amount.toLocaleString()}</span>
+                      </div>
+                    ))
+                  ) : <p className="text-gray-500 text-sm">本日無支出紀錄。</p>}
+                </div>
+              </div>
+
+              {/* Diary Section */}
+              <div>
+                <h3 className="font-semibold text-lg mb-2 text-green-600">日記</h3>
+                {detailsForSelectedDate.diary ? (
+                  <div className="bg-gray-50 p-3 rounded-md whitespace-pre-wrap text-gray-800">
+                    {detailsForSelectedDate.diary.content}
+                  </div>
+                ) : <p className="text-gray-500 text-sm">本日無日記。</p>}
+              </div>
+
+              {/* Habits Section */}
+              <div>
+                <h3 className="font-semibold text-lg mb-2 text-purple-600">習慣追蹤</h3>
+                <div className="space-y-2">
+                  {detailsForSelectedDate.habits.length > 0 ? (
+                    detailsForSelectedDate.habits.map(habit => (
+                      <div key={habit.id} className={`bg-gray-50 p-3 rounded-md flex items-center gap-3 ${habit.isCompleted ? 'text-black' : 'text-gray-400'}`}>
+                        <CheckSquare size={18} className={habit.isCompleted ? 'text-green-500' : 'text-gray-300'} />
+                        <span>{habit.name}</span>
+                      </div>
+                    ))
+                  ) : <p className="text-gray-500 text-sm">尚未建立任何習慣。</p>}
+                </div>
+              </div>
+
+              {/* Todos Section */}
+              <div>
+                <h3 className="font-semibold text-lg mb-2 text-yellow-600">待辦事項</h3>
+                <div className="space-y-2">
+                  {detailsForSelectedDate.todos.length > 0 ? (
+                    detailsForSelectedDate.todos.map(todo => (
+                      <div key={todo.id} className={`bg-gray-50 p-3 rounded-md flex items-center gap-3 ${todo.completed ? 'text-gray-400 line-through' : 'text-black'}`}>
+                        <input type="checkbox" checked={todo.completed} readOnly className="w-4 h-4"/>
+                        <span>{todo.text}</span>
+                      </div>
+                    ))
+                  ) : <p className="text-gray-500 text-sm">本日無相關待辦。</p>}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -721,7 +796,7 @@ const ExpenseDiaryApp = () => {
             )}
 
             {activeTab === 'diary' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 md:col-span-3 gap-8">
                  <div className="md:col-span-1">
                     <h2 className="text-2xl font-bold text-gray-800 mb-4">寫新日記</h2>
                     <div className="bg-green-50 rounded-lg p-6">
@@ -884,12 +959,12 @@ const ExpenseDiaryApp = () => {
                       </thead>
                       <tbody>
                         {(habits || []).map(habit => {
-                          const stats = getHabitMonthStats(habit);
+                          const stats = getHabitMonthStats(habit, habitViewDate);
                           const percentColor = stats.percent >= 80 ? 'bg-green-400' : stats.percent >= 50 ? 'bg-yellow-400' : 'bg-red-300';
                           return (
                             <tr key={habit.id} className="border-b hover:bg-purple-100 transition-colors group">
                               {editingHabitId === habit.id ? (
-                                <td colSpan="9" className="p-2">
+                                <td colSpan="10" className="p-2">
                                   <div className="flex items-center gap-2">
                                     <input type="text" value={editingHabitName} onChange={e => setEditingHabitName(e.target.value)} className="flex-grow border rounded-lg px-3 py-1"/>
                                     <button onClick={updateHabit} className="px-3 py-1 bg-green-600 text-white rounded-md text-sm">儲存</button>
@@ -958,10 +1033,8 @@ const ExpenseDiaryApp = () => {
                     );
                   }}
                   onClickDay={(date) => {
-                    setSelectedCalendarDay(date);
-                    const dateStr = date.toISOString().split('T')[0];
-                    const status = getDayStatus(dateStr);
-                    alert(`【${dateStr}】\n日記：${status.hasDiary?'有':'無'}\n支出：${status.hasExpense?'有':'無'}\n習慣打卡：${status.habitsDone} 項\n待辦：${status.hasTodo?'有':'無'}`);
+                    setSelectedDateForDetail(date);
+                    setIsDetailViewOpen(true);
                   }}
                   className="mx-auto rounded-lg shadow"
                   locale="zh-TW"
