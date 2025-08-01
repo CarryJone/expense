@@ -1,0 +1,118 @@
+.calendar-custom {
+  width: 100%;
+  max-width: 800px;
+  font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+}
+
+.calendar-custom .react-calendar__tile {
+  padding: 15px 10px;
+  font-size: 1.2rem;
+  position: relative;
+  border-radius: 8px;
+  margin: 2px;
+  transition: all 0.3s ease;
+}
+
+.calendar-custom .react-calendar__tile:hover {
+  background-color: #f0f9ff;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
+.calendar-custom .react-calendar__tile--active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-weight: bold;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.calendar-custom .react-calendar__tile--now {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border: 2px solid #ef4444;
+  font-weight: bold;
+}
+
+.calendar-custom .react-calendar__tile--now.react-calendar__tile--active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+}
+
+.calendar-custom .react-calendar__navigation {
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  padding: 15px;
+  border-radius: 12px;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.calendar-custom .react-calendar__navigation button {
+  padding: 8px 12px;
+  font-size: 1.1rem;
+  color: #374151;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.calendar-custom .react-calendar__navigation button:hover {
+  background-color: #9ca3af;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.calendar-custom .react-calendar__month-view__weekdays {
+  text-align: center;
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #374151;
+  background: #f9fafb;
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.calendar-custom .react-calendar__month-view__days {
+  gap: 4px;
+}
+
+.calendar-custom .react-calendar__month-view__weekdays__weekday {
+  padding: 10px 5px;
+}
+
+/* 自訂標記樣式 */
+.calendar-custom .tile-content-wrapper {
+  min-height: 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+  .calendar-custom {
+    font-size: 1rem;
+  }
+  
+  .calendar-custom .react-calendar__tile {
+    padding: 12px 8px;
+    font-size: 1rem;
+  }
+  
+  .calendar-custom .react-calendar__navigation {
+    padding: 10px;
+  }
+  
+  .calendar-custom .react-calendar__navigation button {
+    padding: 6px 8px;
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .calendar-custom .react-calendar__tile {
+    padding: 8px 4px;
+    font-size: 0.9rem;
+  }
+  
+  .calendar-custom .tile-content-wrapper {
+    min-height: 50px;
+  }
+}
