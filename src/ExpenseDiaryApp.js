@@ -93,17 +93,19 @@ const ExpenseDiaryApp = () => {
   const [expensePage, setExpensePage] = useState(1);
   const expensesPerPage = 10;
 
-  // 習慣頁面：計算每月完成率（只宣告一次）
-  const getMonthDays = (year, month) => new Date(year, month, 0).getDate();
+  // 習慣頁面：計算每月完成率（支援任意月份）
+  const getMonthDays = (year, month) => new Date(year, month + 1, 0).getDate();
   const today = new Date();
-  const thisMonthStr = today.toISOString().slice(0, 7);
-  const thisMonthDays = getMonthDays(today.getFullYear(), today.getMonth() + 1);
-  const getHabitMonthStats = (habit) => {
-    const completed = (habit.completedDates || []).filter(d => d.startsWith(thisMonthStr)).length;
+  const [habitsMonth, setHabitsMonth] = useState(today.toISOString().slice(0, 7));
+  
+  const getHabitMonthStats = (habit, targetMonth = habitsMonth) => {
+    const [year, month] = targetMonth.split('-').map(Number);
+    const monthDays = getMonthDays(year, month - 1);
+    const completed = (habit.completedDates || []).filter(d => d.startsWith(targetMonth)).length;
     return {
       completed,
-      total: thisMonthDays,
-      percent: thisMonthDays ? Math.round((completed / thisMonthDays) * 100) : 0
+      total: monthDays,
+      percent: monthDays ? Math.round((completed / monthDays) * 100) : 0
     };
   };
 
@@ -424,6 +426,7 @@ const ExpenseDiaryApp = () => {
   }, [diaryEntries, diarySearch, diaryDateMode, diaryDateValue]);
 
   // 日記統計
+  const thisMonthStr = today.toISOString().slice(0, 7);
   const thisWeekStart = new Date(today);
   thisWeekStart.setDate(today.getDate() - today.getDay());
   const thisWeekEnd = new Date(today);
@@ -843,11 +846,22 @@ const ExpenseDiaryApp = () => {
 
             {activeTab === 'habit' && (
               <div>
-                <div className="flex justify-between items-center mb-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
                   <h2 className="text-2xl font-bold text-gray-800">習慣追蹤</h2>
-                   <div className="flex items-center gap-4">
+                   <div className="flex items-center gap-2 flex-wrap">
+                      <label className="text-sm font-medium text-gray-700">月份：</label>
+                      <input 
+                        type="month" 
+                        value={habitsMonth} 
+                        onChange={(e) => setHabitsMonth(e.target.value)}
+                        className="border rounded-lg px-3 py-2 text-sm"
+                      />
+                   </div>
+                </div>
+                <div className="mb-4 flex items-center gap-4">
+                   <div className="flex items-center gap-1">
                       <button onClick={() => setHabitViewDate(d => new Date(d.setDate(d.getDate() - 7)))} className="p-2 rounded-full hover:bg-gray-200"><ChevronLeft/></button>
-                      <span className="font-semibold">{`${habitViewDate.getFullYear()} / ${habitViewDate.getMonth() + 1}`}</span>
+                      <span className="font-semibold text-sm">{`${habitViewDate.getFullYear()} / ${habitViewDate.getMonth() + 1}`}</span>
                       <button onClick={() => setHabitViewDate(d => new Date(d.setDate(d.getDate() + 7)))} className="p-2 rounded-full hover:bg-gray-200"><ChevronRight/></button>
                    </div>
                 </div>
@@ -861,7 +875,7 @@ const ExpenseDiaryApp = () => {
                       <thead>
                         <tr className="border-b-2">
                           <th className="py-2 px-2 font-semibold text-left">習慣</th>
-                          <th className="py-2 px-2 font-semibold">本月完成率</th>
+                          <th className="py-2 px-2 font-semibold">{habitsMonth} 完成率</th>
                           {Array.from({length: 7}).map((_, i) => {
                             const d = new Date(habitViewDate);
                             d.setDate(d.getDate() - d.getDay() + i);
